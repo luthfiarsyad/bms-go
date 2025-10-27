@@ -1,0 +1,20 @@
+{
+    "swagger": "2.0",
+    "info": {
+        "description": "REST API sederhana untuk mengelola buku dan daftar favorit pengguna.",
+        "title": "Book Management System API",
+        "termsOfService": "http://swagger.io/terms/",
+        "contact": {
+            "name": "API Support",
+            "email": "support@bms-go.local"
+        },
+        "license": {
+            "name": "MIT",
+            "url": "https://opensource.org/licenses/MIT"
+        },
+        "version": "1.0"
+    },
+    "host": "localhost:8080",
+    "basePath": "/",
+    "paths": {}
+}
