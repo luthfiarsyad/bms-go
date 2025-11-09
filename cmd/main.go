@@ -2,7 +2,6 @@ package main
 
 import (
 	"bms-go/config"
-	"bms-go/docs"
 	"bms-go/internal/infra/handler"
 	"bms-go/internal/infra/repository"
 	"bms-go/internal/service"
@@ -42,7 +41,13 @@ func main() {
 
 	r := gin.Default()
 
-	docs.SwaggerInfo.BasePath = "/"
+	// Serve custom Swagger YAML
+	r.Static("/swagger", "./docs")
+	r.GET("/swagger.yaml", func(c *gin.Context) {
+		c.File("./docs/swagger.yaml")
+	})
+	
+	// Fallback to Swagger UI if available
 	r.GET("/swagger/*any", ginSwagger.WrapHandler(swaggerFiles.Handler))
 
 	bookHandler.RegisterRoutes(r)

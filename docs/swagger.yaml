@@ -1,15 +1,843 @@
-basePath: /
-host: localhost:8080
+openapi: 3.0.3
 info:
+  title: Book Management System API
+  description: |
+    ## Comprehensive Book Management API
+    
+    This is a fully-featured REST API for managing books and user favorites with advanced search capabilities.
+    
+    ### Features
+    - **Complete CRUD Operations** for books and favorites
+    - **Advanced Search** with relevance scoring and multiple search strategies
+    - **Search Suggestions** for autocomplete functionality
+    - **Input Validation** with detailed error messages
+    - **Consistent API Response Format** across all endpoints
+    - **Soft Delete** support for books
+    - **Duplicate Prevention** for books and favorites
+    
+    ### Search Capabilities
+    - **Exact Match**: Find exact title or author matches
+    - **Prefix Search**: Find titles/authors starting with query
+    - **Contains Search**: Find titles/authors containing query (default)
+    - **Fuzzy Search**: Advanced matching with typo tolerance
+    - **Relevance Scoring**: Results ranked by relevance
+    - **Multi-field Search**: Search across title, author, and category
+    
+    ### API Response Format
+    All endpoints return a consistent response structure:
+    ```json
+    {
+      "success": true,
+      "message": "Operation completed successfully",
+      "data": { ... }
+    }
+    ```
+    
+    Error responses:
+    ```json
+    {
+      "success": false,
+      "message": "Error description",
+      "error": "Detailed error message"
+    }
+    ```
+  version: 2.0.0
   contact:
-    email: support@bms-go.local
     name: API Support
-  description: REST API sederhana untuk mengelola buku dan daftar favorit pengguna.
+    email: support@bms-go.local
   license:
     name: MIT
     url: https://opensource.org/licenses/MIT
-  termsOfService: http://swagger.io/terms/
-  title: Book Management System API
-  version: "1.0"
-paths: {}
-swagger: "2.0"
+
+servers:
+  - url: http://localhost:8080
+    description: Development server
+
+paths:
+  /books:
+    get:
+      tags:
+        - Books
+      summary: Get all books with basic search
+      description: |
+        Retrieve a list of all books with optional basic search and category filtering. 
+        This endpoint provides simple search functionality that searches within book titles and authors.
+        
+        **Search Strategy**: Uses contains matching across title and author fields.
+        **Sorting**: Results are sorted alphabetically by title.
+      parameters:
+        - name: search
+          in: query
+          description: Search keyword to find books by title or author (basic contains search)
+          schema:
+            type: string
+          example: "harry"
+        - name: category
+          in: query
+          description: Filter books by category exactly
+          schema:
+            type: string
+          example: "Fantasy"
+      responses:
+        '200':
+          description: Books retrieved successfully
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/BookListResponse'
+              example:
+                success: true
+                message: "Books retrieved successfully"
+                data:
+                  - id: 1
+                    title: "Harry Potter and the Sorcerer's Stone"
+                    author: "J.K. Rowling"
+                    category: "Fantasy"
+                    created_at: "2023-01-01T00:00:00Z"
+                    updated_at: "2023-01-01T00:00:00Z"
+        '500':
+          description: Internal server error
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ErrorResponse'
+
+    post:
+      tags:
+        - Books
+      summary: Create new book
+      description: |
+        Add a new book to the system. The system validates for duplicate titles and ensures all required fields are present. 
+        Title, author, and category must be between 1-255 characters.
+        
+        **Validation Rules**:
+        - Title: Required, max 255 characters, must be unique
+        - Author: Required, max 255 characters
+        - Category: Required, max 255 characters
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/BookRequest'
+            example:
+              title: "1984"
+              author: "George Orwell"
+              category: "Dystopian"
+      responses:
+        '201':
+          description: Book created successfully
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/BookResponse'
+              example:
+                success: true
+                message: "Book created successfully"
+                data:
+                  id: 1
+                  title: "1984"
+                  author: "George Orwell"
+                  category: "Dystopian"
+                  created_at: "2023-01-01T00:00:00Z"
+                  updated_at: "2023-01-01T00:00:00Z"
+        '400':
+          description: Invalid request body or validation failed
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ErrorResponse'
+        '409':
+          description: Book with this title already exists
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ErrorResponse'
+        '500':
+          description: Internal server error
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ErrorResponse'
+
+  /books/search:
+    get:
+      tags:
+        - Books
+      summary: Advanced book search with relevance scoring
+      description: |
+        Perform sophisticated search with multiple criteria, relevance scoring, and advanced matching algorithms. 
+        Supports exact matching, prefix matching, contains search, and fuzzy search with typo tolerance. 
+        Results are ranked by relevance with exact matches appearing first.
+        
+        **Search Strategies**:
+        - `exact`: Exact title or author match (highest relevance)
+        - `starts_with`: Title/author starts with query (high relevance)
+        - `contains`: Title/author contains query (medium relevance)
+        - `fuzzy`: Advanced fuzzy matching with variations and misspellings (variable relevance)
+        
+        **Relevance Scoring**:
+        1. Exact title match
+        2. Title starts with query
+        3. Title contains query
+        4. Author contains query
+        5. Category contains query
+      parameters:
+        - name: query
+          in: query
+          description: Search query string - searches across title, author, and category
+          schema:
+            type: string
+          example: "harry potter"
+        - name: category
+          in: query
+          description: Filter by exact category match
+          schema:
+            type: string
+          example: "Fantasy"
+        - name: author
+          in: query
+          description: Filter by author (partial match)
+          schema:
+            type: string
+          example: "rowling"
+        - name: search_type
+          in: query
+          description: Search strategy
+          schema:
+            type: string
+            enum: [exact, starts_with, contains, fuzzy]
+            default: "contains"
+          example: "contains"
+        - name: sort_by
+          in: query
+          description: Sort field for results
+          schema:
+            type: string
+            enum: [title, author, category, created_at, relevance]
+            default: "relevance"
+          example: "relevance"
+        - name: sort_order
+          in: query
+          description: Sort order
+          schema:
+            type: string
+            enum: [ASC, DESC]
+            default: "ASC"
+          example: "ASC"
+        - name: limit
+          in: query
+          description: Maximum number of results to return (1-100)
+          schema:
+            type: integer
+            minimum: 1
+            maximum: 100
+            default: 20
+          example: 10
+        - name: offset
+          in: query
+          description: Number of results to skip for pagination
+          schema:
+            type: integer
+            minimum: 0
+            default: 0
+          example: 0
+      responses:
+        '200':
+          description: Search completed successfully
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/BookListResponse'
+        '400':
+          description: Invalid search parameters
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ErrorResponse'
+        '500':
+          description: Internal server error
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ErrorResponse'
+
+  /books/suggestions:
+    get:
+      tags:
+        - Books
+      summary: Get search suggestions for autocomplete
+      description: |
+        Retrieve search suggestions based on existing book titles and authors. 
+        Perfect for implementing autocomplete functionality in user interfaces. 
+        Returns unique titles and authors that contain the search query.
+        
+        **Use Cases**:
+        - Autocomplete dropdowns in search boxes
+        - Search suggestions as user types
+        - Popular book/author recommendations
+      parameters:
+        - name: query
+          in: query
+          required: true
+          description: Search query for suggestions (minimum 1 character)
+          schema:
+            type: string
+            minLength: 1
+          example: "harry"
+        - name: limit
+          in: query
+          description: Maximum number of suggestions to return (1-20)
+          schema:
+            type: integer
+            minimum: 1
+            maximum: 20
+            default: 10
+          example: 5
+      responses:
+        '200':
+          description: Suggestions retrieved successfully
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/SuggestionsResponse'
+              example:
+                success: true
+                message: "Suggestions retrieved successfully"
+                data:
+                  - "Harry Potter and the Sorcerer's Stone"
+                  - "Harry Potter and the Chamber of Secrets"
+                  - "J.K. Rowling"
+        '400':
+          description: Query parameter is required or invalid limit
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ErrorResponse'
+        '500':
+          description: Internal server error
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ErrorResponse'
+
+  /books/{id}:
+    get:
+      tags:
+        - Books
+      summary: Get book by ID
+      description: |
+        Retrieve detailed information about a specific book using its unique identifier. 
+        Returns complete book details including timestamps.
+      parameters:
+        - name: id
+          in: path
+          required: true
+          description: Book ID (must be a positive integer)
+          schema:
+            type: integer
+            minimum: 1
+          example: 1
+      responses:
+        '200':
+          description: Book retrieved successfully
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/BookResponse'
+              example:
+                success: true
+                message: "Book retrieved successfully"
+                data:
+                  id: 1
+                  title: "The Great Gatsby"
+                  author: "F. Scott Fitzgerald"
+                  category: "Classic"
+                  created_at: "2023-01-01T00:00:00Z"
+                  updated_at: "2023-01-01T00:00:00Z"
+        '400':
+          description: Invalid book ID format
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ErrorResponse'
+        '404':
+          description: Book not found
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ErrorResponse'
+
+    put:
+      tags:
+        - Books
+      summary: Update book
+      description: |
+        Update existing book information by ID. Validates that the book exists and checks for duplicate titles 
+        (excluding the current book). All fields are required and must be between 1-255 characters.
+      parameters:
+        - name: id
+          in: path
+          required: true
+          description: Book ID (must be a positive integer)
+          schema:
+            type: integer
+            minimum: 1
+          example: 1
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/BookRequest'
+            example:
+              title: "1984: Special Edition"
+              author: "George Orwell"
+              category: "Classic Dystopian"
+      responses:
+        '200':
+          description: Book updated successfully
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/BookResponse'
+        '400':
+          description: Invalid request body, validation failed, or invalid book ID
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ErrorResponse'
+        '404':
+          description: Book not found
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ErrorResponse'
+        '409':
+          description: Book with this title already exists
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ErrorResponse'
+        '500':
+          description: Internal server error
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ErrorResponse'
+
+    delete:
+      tags:
+        - Books
+      summary: Delete book
+      description: |
+        Soft delete a book by its ID. The book is marked as deleted but remains in the database. 
+        This operation is irreversible and will also remove the book from all favorites lists.
+      parameters:
+        - name: id
+          in: path
+          required: true
+          description: Book ID (must be a positive integer)
+          schema:
+            type: integer
+            minimum: 1
+          example: 1
+      responses:
+        '200':
+          description: Book deleted successfully
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/SuccessResponse'
+              example:
+                success: true
+                message: "Book deleted successfully"
+        '400':
+          description: Invalid book ID format
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ErrorResponse'
+        '404':
+          description: Book not found
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ErrorResponse'
+        '500':
+          description: Internal server error
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ErrorResponse'
+
+  /favorites:
+    get:
+      tags:
+        - Favorites
+      summary: Get all user favorites
+      description: |
+        Retrieve a list of all books marked as favorites by the current user. 
+        Each favorite includes book details such as title, author, and category. 
+        The user ID is currently hardcoded to 1 for demo purposes.
+      responses:
+        '200':
+          description: Favorites retrieved successfully
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/FavoriteListResponse'
+              example:
+                success: true
+                message: "Favorites retrieved successfully"
+                data:
+                  - id: 1
+                    user_id: 1
+                    book_id: 1
+                    created_at: "2023-01-01T00:00:00Z"
+                    book:
+                      id: 1
+                      title: "Harry Potter and the Sorcerer's Stone"
+                      author: "J.K. Rowling"
+                      category: "Fantasy"
+                      created_at: "2023-01-01T00:00:00Z"
+                      updated_at: "2023-01-01T00:00:00Z"
+        '500':
+          description: Internal server error
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ErrorResponse'
+
+    post:
+      tags:
+        - Favorites
+      summary: Add book to favorites
+      description: |
+        Add a book to the current user's favorites list. Validates that the book exists and checks for duplicates. 
+        The user ID is currently hardcoded to 1 for demo purposes. Returns the complete favorite details including book information.
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/FavoriteRequest'
+            example:
+              book_id: 1
+      responses:
+        '201':
+          description: Favorite added successfully
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/FavoriteResponse'
+              example:
+                success: true
+                message: "Favorite added successfully"
+                data:
+                  id: 1
+                  user_id: 1
+                  book_id: 1
+                  created_at: "2023-01-01T00:00:00Z"
+                  book:
+                    id: 1
+                    title: "Harry Potter and the Sorcerer's Stone"
+                    author: "J.K. Rowling"
+                    category: "Fantasy"
+                    created_at: "2023-01-01T00:00:00Z"
+                    updated_at: "2023-01-01T00:00:00Z"
+        '400':
+          description: Invalid request body or validation failed
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ErrorResponse'
+        '404':
+          description: Book not found
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ErrorResponse'
+        '409':
+          description: Book already in favorites
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ErrorResponse'
+        '500':
+          description: Internal server error
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ErrorResponse'
+
+  /favorites/{id}:
+    get:
+      tags:
+        - Favorites
+      summary: Get favorite by ID
+      description: |
+        Retrieve detailed information about a specific favorite entry using its unique identifier. 
+        Returns complete favorite details including the associated book information.
+      parameters:
+        - name: id
+          in: path
+          required: true
+          description: Favorite ID (must be a positive integer)
+          schema:
+            type: integer
+            minimum: 1
+          example: 1
+      responses:
+        '200':
+          description: Favorite retrieved successfully
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/FavoriteResponse'
+        '400':
+          description: Invalid favorite ID format
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ErrorResponse'
+        '404':
+          description: Favorite not found
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ErrorResponse'
+
+    delete:
+      tags:
+        - Favorites
+      summary: Remove book from favorites
+      description: |
+        Remove a book from the current user's favorites list using the favorite entry ID. 
+        This operation only removes the favorite relationship, not the book itself. 
+        The user ID is currently hardcoded to 1 for demo purposes.
+      parameters:
+        - name: id
+          in: path
+          required: true
+          description: Favorite ID (must be a positive integer)
+          schema:
+            type: integer
+            minimum: 1
+          example: 1
+      responses:
+        '200':
+          description: Favorite removed successfully
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/SuccessResponse'
+              example:
+                success: true
+                message: "Favorite removed successfully"
+        '400':
+          description: Invalid favorite ID format
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ErrorResponse'
+        '404':
+          description: Favorite not found
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ErrorResponse'
+        '500':
+          description: Internal server error
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ErrorResponse'
+
+components:
+  schemas:
+    Book:
+      type: object
+      properties:
+        id:
+          type: integer
+          example: 1
+        title:
+          type: string
+          example: "Harry Potter and the Sorcerer's Stone"
+        author:
+          type: string
+          example: "J.K. Rowling"
+        category:
+          type: string
+          example: "Fantasy"
+        created_at:
+          type: string
+          format: date-time
+          example: "2023-01-01T00:00:00Z"
+        updated_at:
+          type: string
+          format: date-time
+          example: "2023-01-01T00:00:00Z"
+
+    BookRequest:
+      type: object
+      required:
+        - title
+        - author
+        - category
+      properties:
+        title:
+          type: string
+          description: "Book title (1-255 characters, must be unique)"
+          minLength: 1
+          maxLength: 255
+          example: "1984"
+        author:
+          type: string
+          description: "Book author (1-255 characters)"
+          minLength: 1
+          maxLength: 255
+          example: "George Orwell"
+        category:
+          type: string
+          description: "Book category (1-255 characters)"
+          minLength: 1
+          maxLength: 255
+          example: "Dystopian"
+
+    Favorite:
+      type: object
+      properties:
+        id:
+          type: integer
+          example: 1
+        user_id:
+          type: integer
+          example: 1
+        book_id:
+          type: integer
+          example: 1
+        created_at:
+          type: string
+          format: date-time
+          example: "2023-01-01T00:00:00Z"
+        book:
+          $ref: '#/components/schemas/Book'
+
+    FavoriteRequest:
+      type: object
+      required:
+        - book_id
+      properties:
+        book_id:
+          type: integer
+          description: "ID of the book to add to favorites"
+          minimum: 1
+          example: 1
+
+    APIResponse:
+      type: object
+      properties:
+        success:
+          type: boolean
+          example: true
+        message:
+          type: string
+          example: "Operation completed successfully"
+        data:
+          type: object
+          description: "Response data (varies by endpoint)"
+        error:
+          type: string
+          description: "Error message (only present when success=false)"
+          example: "Detailed error message"
+
+    BookResponse:
+      allOf:
+        - $ref: '#/components/schemas/APIResponse'
+        - type: object
+          properties:
+            data:
+              $ref: '#/components/schemas/Book'
+
+    BookListResponse:
+      allOf:
+        - $ref: '#/components/schemas/APIResponse'
+        - type: object
+          properties:
+            data:
+              type: array
+              items:
+                $ref: '#/components/schemas/Book'
+
+    FavoriteResponse:
+      allOf:
+        - $ref: '#/components/schemas/APIResponse'
+        - type: object
+          properties:
+            data:
+              $ref: '#/components/schemas/Favorite'
+
+    FavoriteListResponse:
+      allOf:
+        - $ref: '#/components/schemas/APIResponse'
+        - type: object
+          properties:
+            data:
+              type: array
+              items:
+                $ref: '#/components/schemas/Favorite'
+
+    SuggestionsResponse:
+      allOf:
+        - $ref: '#/components/schemas/APIResponse'
+        - type: object
+          properties:
+            data:
+              type: array
+              items:
+                type: string
+              example:
+                - "Harry Potter and the Sorcerer's Stone"
+                - "Harry Potter and the Chamber of Secrets"
+                - "J.K. Rowling"
+
+    SuccessResponse:
+      allOf:
+        - $ref: '#/components/schemas/APIResponse'
+        - type: object
+          example:
+            success: true
+            message: "Operation completed successfully"
+
+    ErrorResponse:
+      allOf:
+        - $ref: '#/components/schemas/APIResponse'
+        - type: object
+          properties:
+            success:
+              type: boolean
+              example: false
+            message:
+              type: string
+              example: "Error description"
+            error:
+              type: string
+              example: "Detailed error message"
+          example:
+            success: false
+            message: "Validation failed"
+            error: "title: Title is required"
+
+  securitySchemes:
+    BearerAuth:
+      type: http
+      scheme: bearer
+      bearerFormat: JWT
+
+tags:
+  - name: Books
+    description: "Book management operations with advanced search capabilities"
+  - name: Favorites
+    description: "User favorites management operations"

@@ -13,7 +13,6 @@ import (
 // requiredKeys berisi daftar key yang wajib diisi
 var requiredKeys = []string{
 	"database.user",
-	"database.pass",
 	"database.host",
 	"database.port",
 	"database.name",
